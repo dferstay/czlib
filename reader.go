@@ -17,6 +17,7 @@ type reader struct {
 	strm   zstream
 	err    error
 	skipIn bool
+	closed bool
 }
 
 // NewReader creates a new io.ReadCloser. Reads from the returned io.ReadCloser
@@ -67,7 +68,6 @@ func (z *reader) Read(p []byte) (int, error) {
 			// data we got from the reader, and then return the
 			// error, whatever it is.
 			if (z.err != nil && z.err != io.EOF) || (n == 0 && z.err == io.EOF) {
-				z.strm.inflateEnd()
 				return 0, z.err
 			}
 
@@ -80,7 +80,6 @@ func (z *reader) Read(p []byte) (int, error) {
 		ret, err := z.strm.inflate(zNoFlush)
 		if err != nil {
 			z.err = err
-			z.strm.inflateEnd()
 			return 0, z.err
 		}
 
@@ -95,13 +94,10 @@ func (z *reader) Read(p []byte) (int, error) {
 
 // Close closes the Reader. It does not close the underlying io.Reader.
 func (z *reader) Close() error {
-	if z.err != nil {
-		if z.err != io.EOF {
-			return z.err
-		}
+	if z.closed {
 		return nil
 	}
 	z.strm.inflateEnd()
-	z.err = io.EOF
+	z.closed = true
 	return nil
 }
