@@ -40,7 +40,9 @@ func NewReaderBuffer(r io.Reader, bufferSize int) (io.ReadCloser, error) {
 
 func (z *reader) Read(p []byte) (int, error) {
 	if z.err != nil {
-		return 0, z.err
+		err := z.err
+		z.err = nil
+		return 0, err
 	}
 
 	if len(p) == 0 {
@@ -55,20 +57,11 @@ func (z *reader) Read(p []byte) (int, error) {
 		if !z.skipIn && z.strm.availIn() == 0 {
 			var n int
 			n, z.err = z.r.Read(z.in)
-			// If we got data and EOF, pretend we didn't get the
-			// EOF.  That way we will return the right values
-			// upstream.  Note this will trigger another read
-			// later on, that should return (0, EOF).
-			if n > 0 && z.err == io.EOF {
-				z.err = nil
-			}
 
-			// FIXME(alainjobart) this code is not compliant with
-			// the Reader interface. We should process all the
-			// data we got from the reader, and then return the
-			// error, whatever it is.
-			if (z.err != nil && z.err != io.EOF) || (n == 0 && z.err == io.EOF) {
-				return 0, z.err
+			if n == 0 {
+				err := z.err
+				z.err = nil
+				return 0, err
 			}
 
 			z.strm.setInBuf(z.in, n)
@@ -79,15 +72,17 @@ func (z *reader) Read(p []byte) (int, error) {
 		// inflate some
 		ret, err := z.strm.inflate(zNoFlush)
 		if err != nil {
-			z.err = err
-			return 0, z.err
+			z.err = nil
+			return 0, err
 		}
 
 		// if we read something, we're good
 		have := len(p) - z.strm.availOut()
-		if have > 0 {
+		if have >= 0 {
 			z.skipIn = ret == Z_OK && z.strm.availOut() == 0
-			return have, z.err
+			err := z.err
+			z.err = nil
+			return have, err
 		}
 	}
 }
